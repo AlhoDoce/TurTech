@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relatórios - TurTech</title>
+    <link rel="stylesheet" href="style.css">
+
+    <!-- Firebase -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+        import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+
+        const firebaseConfig = {
+            apiKey: "SUA_API_KEY",
+            authDomain: "SEU_AUTH_DOMAIN",
+            projectId: "SEU_PROJECT_ID",
+            storageBucket: "SEU_BUCKET",
+            messagingSenderId: "SEU_ID",
+            appId: "SEU_APP_ID"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        // 🔒 PROTEGER PÁGINA — SOMENTE ADMIN
+        onAuthStateChanged(auth, async (user) => {
+            if (!user) {
+                window.location.href = "index.html";
+                return;
+            }
+
+            const snap = await getDocs(collection(db, "usuarios"));
+            let role = "user";
+
+            snap.forEach(u => {
+                if (u.id === user.uid) {
+                    role = u.data().tipo;
+                }
+            });
+
+            if (role !== "admin") {
+                alert("Apenas administradores podem acessar relatórios.");
+                window.location.href = "sistema.html";
+            }
+        });
+
+        // 🔹 GERAR PDF
+        window.gerarRelatorio = async function () {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+
+            const querySnapshot = await getDocs(collection(db, "tickets"));
+            let y = 10;
+
+            doc.setFontSize(18);
+            doc.text("Relatório de Tickets - TurTech", 10, y);
+            y += 15;
+
+            doc.setFontSize(12);
+
+            querySnapshot.forEach((t) => {
+                const ticket = t.data();
+
+                doc.text(`Título: ${ticket.titulo}`, 10, y); y += 6;
+                doc.text(`Descrição: ${ticket.descricao}`, 10, y); y += 6;
+                doc.text(`Status: ${ticket.status}`, 10, y); y += 6;
+                doc.text(`Prioridade: ${ticket.prioridade}`, 10, y); y += 6;
+                doc.text(`Autor: ${ticket.autor}`, 10, y); y += 6;
+                doc.text(`Data: ${ticket.data}`, 10, y); y += 10;
+
+                if (y > 270) {
+                    doc.addPage();
+                    y = 10;
+                }
+            });
+
+            doc.save("relatorio_tickets.pdf");
+        };
+
+        // 🔹 GERAR EXCEL (XLSX)
+        window.gerarExcel = async function () {
+            const querySnapshot = await getDocs(collection(db, "tickets"));
+            const rows = [];
+
+            rows.push([
+                "ID",
+                "Título",
+                "Descrição",
+                "Status",
+                "Prioridade",
+                "Autor",
+                "Data",
+                "Data Formatada"
+            ]);
+
+            querySnapshot.forEach((doc) => {
+                const t = doc.data();
+
+                let dataFormatada = t.data ? new Date(t.data).toLocaleString("pt-BR") : "";
+
+                rows.push([
+                    doc.id,
+                    t.titulo ?? "",
+                    t.descricao ?? "",
+                    t.status ?? "",
+                    t.prioridade ?? "",
+                    t.autor ?? "",
+                    t.data ?? "",
+                    dataFormatada
+                ]);
+            });
+
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet(rows);
+
+            // Ajuste automático das colunas
+            const colWidths = rows[0].map((_, i) => ({
+                wch: Math.max(...rows.map(row => (row[i] ? row[i].toString().length : 10))) + 5
+            }));
+            ws['!cols'] = colWidths;
+
+            XLSX.utils.book_append_sheet(wb, ws, "Tickets");
+
+            XLSX.writeFile(wb, "relatorio_tickets.xlsx");
+        };
+
+        // Logout
+        window.logout = function () {
+            auth.signOut();
+            window.location.href = "index.html";
+        };
+    </script>
+
+    <!-- XLSX Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+</head>
+<body>
+
+<div class="sidebar">
+    <h2>TurTech</h2>
+    <ul>
+        <li><a href="sistema.html">Dashboard</a></li>
+        <li><a href="tickets.html">Tickets</a></li>
+        <li><a href="novo_ticket.html">Novo Ticket</a></li>

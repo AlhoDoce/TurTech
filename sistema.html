@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistema TurTech</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="container">
+  <nav id="sidebar">
+    <h1>TurTech</h1>
+    <ul>
+      <li class="nav-item active" data-section="dashboard">Dashboard</li>
+      <li class="nav-item" data-section="tickets">Tickets</li>
+
+      <!-- SÓ ADMIN VÊ ESSA ABA (O JS OCULTA PARA USER NORMAL) -->
+      <li class="nav-item" id="relatorios-nav" data-section="relatorios">Relatórios</li>
+
+      <li id="new-ticket-btn">Novo Ticket</li>
+      <li id="logout-btn" class="logout">Sair</li>
+    </ul>
+  </nav>
+
+  <main>
+    <header>
+      <div class="left">
+        <button id="menu-toggle" class="menu-toggle">☰</button>
+        <h2 id="section-title">Dashboard</h2>
+      </div>
+      <div class="right">
+        <span id="user-info"></span>
+        <button class="btn primary" id="open-new">Novo Ticket</button>
+      </div>
+    </header>
+
+    <!-- DASHBOARD -->
+    <section id="dashboard-section" class="page active">
+      <div class="dashboard-cards">
+        <div class="card"><h3>Abertos</h3><p id="count-aberto">0</p></div>
+        <div class="card"><h3>Em Andamento</h3><p id="count-andamento">0</p></div>
+        <div class="card"><h3>Concluídos</h3><p id="count-concluido">0</p></div>
+        <div class="card"><h3>Total</h3><p id="count-total">0</p></div>
+      </div>
+    </section>
+
+    <!-- TICKETS -->
+    <section id="tickets-section" class="page" aria-hidden="true">
+      <div class="controls-row">
+        <div class="tickets-controls">
+          <input id="search-ticket" type="text" placeholder="Buscar ticket...">
+          <select id="sort-ticket">
+            <option value="newest">Mais Recentes</option>
+            <option value="oldest">Mais Antigos</option>
+          </select>
+        </div>
+        <div class="filter-buttons">
+          <button class="filter-btn active" data-filter="Todos">Todos</button>
+          <button class="filter-btn" data-filter="Aberto">Aberto</button>
+          <button class="filter-btn" data-filter="Em Andamento">Em Andamento</button>
+          <button class="filter-btn" data-filter="Concluído">Concluído</button>
+        </div>
+      </div>
+      <div id="tickets-container" class="tickets"></div>
+    </section>
+
+    <!-- RELATÓRIOS (ADMIN APENAS) -->
+    <section id="relatorios-section" class="page" aria-hidden="true">
+  <h2>Relatórios do Sistema</h2>
+  <p>Gerar relatório completo de tickets.</p>
+
+  <button id="gerar-excel" class="btn primary">Gerar Excel</button>
+  <br><br>
+
+</section>
+
+
+  </main>
+</div>
+
+<!-- MODAL -->
+<div class="modal" id="ticket-modal">
+  <div class="modal-content">
+    <h3 id="modal-title">Novo Ticket</h3>
+
+    <label for="ticket-title">Título</label>
+    <input id="ticket-title" type="text" placeholder="Título do ticket">
+
+    <label for="ticket-desc">Descrição</label>
+    <textarea id="ticket-desc" rows="4" placeholder="Descreva o problema"></textarea>
+
+    <div class="row">
+      <div class="col">
+        <label for="ticket-status">Status</label>
+        <select id="ticket-status">
+          <option value="Aberto">Aberto</option>
+          <option value="Em Andamento">Em Andamento</option>
+          <option value="Concluído">Concluído</option>
+        </select>
+      </div>
+      <div class="col">
+        <label for="ticket-priority">Prioridade</label>
+        <select id="ticket-priority">
+          <option value="Baixa">Baixa</option>
+          <option value="Média">Média</option>
+          <option value="Alta">Alta</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button id="save-ticket" class="btn primary">Salvar</button>
+      <button id="cancel-ticket" class="btn ghost">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- script principal -->
+<script src="script.js" type="module"></script>
+
+<!-- Firebase -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-app.js";
+  import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-analytics.js";
+  import { getFirestore } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyCxMSS7uw16n6cGFqSbK0TtSkneML4Q34E",
+    authDomain: "gestaoti-7daa4.firebaseapp.com",
+    projectId: "gestaoti-7daa4",
+    storageBucket: "gestaoti-7daa4.firebasestorage.app",
+    messagingSenderId: "603529631995",
+    appId: "1:603529631995:web:a54d099f9decc5a275785e",
+    measurementId: "G-4QLXV94BLE"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const analytics = getAnalytics(app);
+
+  window.db = db;
+</script>
+<script type="module">
+
+import { 
+    collection, getDocs, query, where 
+} from "https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js";
+
+const btnExcel = document.getElementById("gerar-excel");
+
+btnExcel.addEventListener("click", async () => {
+    try {
+        const user = JSON.parse(localStorage.getItem("currentUser"));
+
+
+        if (!user) {
+            alert("Erro: usuário não encontrado.");
+            return;
+        }
+
+        const ticketsRef = collection(db, "tickets");
+
+        let q;
+
+        // ADMIN → pega tudo
+        // USER → pega só dele
+        if (user.role === "admin") {
+            q = query(ticketsRef);
+        } else {
+            q = query(ticketsRef, where("autorUID", "==", user.uid));
+        }
+
+        const snap = await getDocs(q);
+
+        const dados = [];
+
+        snap.forEach(doc => {
+            const t = doc.data();
+            dados.push({
+                Título: t.titulo || "",
+                Descrição: t.descricao || "",
+                Status: t.status || "",
+                Prioridade: t.prioridade || "",
+                Autor: t.autor || "",
+                Data: t.data || ""
+            });
+        });
+
+        if (dados.length === 0) {
+            alert("Nenhum ticket encontrado.");
+            return;
+        }
+
+        // Criar planilha Excel
+        const worksheet = XLSX.utils.json_to_sheet(dados);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Tickets");
+
+        // Gera e baixa
+        XLSX.writeFile(workbook, "relatorio_turtech.xlsx");
+
+    } catch (e) {
+        alert("Erro ao gerar relatório: " + e.message);
+        console.error(e);
+    }
+});
+
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+
+</body>
+</html>
